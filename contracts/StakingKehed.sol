@@ -40,12 +40,20 @@ contract StakingKehed {
     function claimReward() external {
         uint256 reward = (stakedBalances[msg.sender] * 10) / 100;
         require(reward > 0, "Lu gak punya saldo yang di stake Blegug");
+        require(
+            khdToken.balanceOf(address(this)) >= reward,
+            "Saldo reward staking tidak cukup"
+        );
 
         khdToken.transfer(msg.sender, reward);
     }
     function autoCompound() external {
         uint256 reward = (stakedBalances[msg.sender] * 10) / 100;
         require(reward > 0, "Gak ada reward yang di-compound");
+        require(
+            khdToken.balanceOf(address(this)) >= reward,
+            "Saldo reward staking tidak cukup"
+        );
         stakedBalances[msg.sender] += reward;
     }
 }

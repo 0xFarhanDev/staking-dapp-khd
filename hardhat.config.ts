@@ -18,7 +18,11 @@ const config: HardhatUserConfig = {
       url: process.env.SEPOLIA_URL || process.env.ALCHEMY_RPC_URL || "",
       accounts: normalizedPrivateKey ? [normalizedPrivateKey] : [],
     },
-  },
+    baseSepolia: {
+      url: "https://sepolia.base.org",
+      accounts: normalizedPrivateKey ? [normalizedPrivateKey] : [],
+    }
+  }
 };
 
 export default config;
