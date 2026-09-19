@@ -21,8 +21,11 @@ const config: HardhatUserConfig = {
     baseSepolia: {
       url: "https://sepolia.base.org",
       accounts: normalizedPrivateKey ? [normalizedPrivateKey] : [],
-    }
-  }
-};
+    },
+  },
+    etherscan: {
+      apiKey: process.env.BASESCAN_API_KEY || "",
+    },
+  };
 
 export default config;

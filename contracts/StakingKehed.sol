@@ -2,8 +2,10 @@
 pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 
-contract StakingKehed {
+contract StakingKehed is Ownable, Pausable {
 
     IERC20 public khdToken;
     uint256 public constant LOCK_DURATION = 60 seconds;
@@ -18,16 +20,23 @@ contract StakingKehed {
     event RewardClaimed(address indexed user, uint256 amount);
     event Compounded(address indexed user, uint256 amount);
 
-    constructor(address _tokenAddress) {
+    constructor(address _tokenAddress) Ownable(msg.sender) {
         khdToken = IERC20(_tokenAddress);
     }
+     function pause() external onlyOwner {
+        _pause();
+     }
+     function unpause() external onlyOwner {
+        _unpause();
+     }
+     function emergancyWithdrawToken(uint256 amount) external onlyOwner {
+        khdToken.transfer(owner(), amount);
+     }
 
-    function stake(uint256 _amount) external {
+    function stake(uint256 _amount) external whenNotPaused {
         require(_amount > 0, "Amount must be greater than 0");
-        if (stakedBalances[msg.sender] == 0) {
-            stakeTimestamp[msg.sender] = block.timestamp;
-        }
-
+    
+        stakeTimestamp[msg.sender] = block.timestamp;
         lastClaimTimestamp[msg.sender] = block.timestamp;
 
         khdToken.transferFrom(msg.sender, address(this), _amount);
@@ -37,7 +46,7 @@ contract StakingKehed {
 
     }
 
-    function withdraw(uint256 amount) external {
+    function withdraw(uint256 amount) external whenNotPaused {
         require(stakedBalances[msg.sender] >= amount, "Saldo Kurang Blegug");
 
         require(
@@ -50,7 +59,7 @@ contract StakingKehed {
         emit Withdrawn(msg.sender, amount);
     }
 
-    function claimReward() external {
+    function claimReward() external whenNotPaused {
         uint256 reward = (stakedBalances[msg.sender] * 10) / 100;
         require(reward > 0, "Lu gak punya saldo yang di stake Blegug");
         require(
@@ -72,7 +81,7 @@ contract StakingKehed {
         emit RewardClaimed(msg.sender, reward);
     }
 
-    function autoCompound() external {
+    function autoCompound() external whenNotPaused {
         uint256 reward = (stakedBalances[msg.sender] * 10) / 100;
         require(reward > 0, "Gak ada reward yang di-compound");
         require(
