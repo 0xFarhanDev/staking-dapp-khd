@@ -2,13 +2,17 @@
 pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 
-contract StakingKehed is Ownable, Pausable, ReentrancyGuard {
+contract StakingKehed is AccessControl, Pausable, ReentrancyGuard {
+
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+    bytes32 public constant WITHDRAWER_ROLE = keccak256("WITHDRAWER_ROLE");
 
     IERC20 public khdToken;
+    address public feeCollector;
     uint256 public constant LOCK_DURATION = 60 seconds;
     uint256 public maxStakePerUser = 5000 * 10 ** 18;
     uint256 public withdrawalFeePercentage = 1;
@@ -23,17 +27,23 @@ contract StakingKehed is Ownable, Pausable, ReentrancyGuard {
     event RewardClaimed(address indexed user, uint256 amount, uint256 timestamp);
     event Compounded(address indexed user, uint256 amount, uint256 timestamp);
 
-    constructor(address _tokenAddress) Ownable(msg.sender) {
+    constructor(address _tokenAddress) AccessControl() {
         khdToken = IERC20(_tokenAddress);
+        feeCollector = msg.sender;
+
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(PAUSER_ROLE, msg.sender);
+        _grantRole(WITHDRAWER_ROLE, msg.sender);
     }
-     function pause() external onlyOwner {
+     function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
      }
-     function unpause() external onlyOwner {
+     function unpause() external onlyRole(PAUSER_ROLE) {
         _unpause();
      }
-     function emergancyWithdrawToken(uint256 amount) external onlyOwner {
-        khdToken.transfer(owner(), amount);
+     function emergancyWithdrawToken(uint256 amount) external onlyRole(WITHDRAWER_ROLE) {
+        require(khdToken.balanceOf(address(this)) >= amount, "Saldo token tidak cukup");
+        khdToken.transfer(msg.sender, amount);
      }
 
     function stake(uint256 _amount) external whenNotPaused nonReentrant {
@@ -58,35 +68,6 @@ contract StakingKehed is Ownable, Pausable, ReentrancyGuard {
     function calculateRewards(address user) public view returns (uint256) {
         if (stakedBalances[user] == 0) return 0;
         return (stakedBalances[user] * 10) / 100;
-    }
-
-    function withdraw() external whenNotPaused nonReentrant {
-        uint256 stakedAmount = stakedBalances[msg.sender];
-        require(stakedAmount > 0, "Saldo Kurang Blegug");
-        
-        uint256 reward = 0;
-        if (block.timestamp >= lastClaimTimestamp[msg.sender] + 60 seconds) {
-            reward = calculateRewards(msg.sender);
-        }
-        stakedBalances[msg.sender] = 0;
-        lastClaimTimestamp[msg.sender] = 0;
-
-        uint256 feeAmount = (stakedAmount * withdrawalFeePercentage) / 100;
-        uint256 amountToUser = stakedAmount - feeAmount;
-
-        require(
-            khdToken.transfer(owner(), feeAmount),
-            "Gagal Kirim Pajak ke Owner"
-        );
-        require(
-            khdToken.transfer(msg.sender, amountToUser), 
-            "Gagal kembaliin Modal");
-            if (reward > 0) {
-                require(khdToken.transfer(msg.sender, reward), "Gagal kirim reward");
-                emit RewardClaimed(msg.sender, reward, block.timestamp);
-            }
-
-        emit Withdrawn(msg.sender, amountToUser, feeAmount, block.timestamp);
     }
 
     function claimReward() external whenNotPaused nonReentrant {
@@ -126,7 +107,44 @@ contract StakingKehed is Ownable, Pausable, ReentrancyGuard {
         
         emit Compounded(msg.sender, reward, block.timestamp);
     }
-    function updadeMaxStake(uint256 _newMax) external onlyOwner {
+    function updateMaxStake(uint256 _newMax) external onlyRole(DEFAULT_ADMIN_ROLE) {
         maxStakePerUser = _newMax;
+    }
+
+    function setFeeCollector(address _newFeeCollector) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_newFeeCollector != address(0), "Fee collector cannot be zero address");
+        feeCollector = _newFeeCollector;
+    }
+
+    function withdraw() external whenNotPaused nonReentrant {
+        uint256 stakedAmount = stakedBalances[msg.sender];
+        require(stakedAmount > 0, "Saldo Kurang Blegug");
+
+        uint256 reward = 0;
+        if (block.timestamp >= lastClaimTimestamp[msg.sender] + 60 seconds) {
+            reward = calculateRewards(msg.sender);
+        }
+
+        stakedBalances[msg.sender] = 0;
+        lastClaimTimestamp[msg.sender] = 0;
+
+        uint256 feeAmount = (stakedAmount * withdrawalFeePercentage) / 100;
+        uint256 amountToUser = stakedAmount - feeAmount;
+
+        require(
+            khdToken.transfer(feeCollector, feeAmount),
+            "Gagal Kirim Pajak ke Owner"
+        );
+        require(
+            khdToken.transfer(msg.sender, amountToUser),
+            "Gagal kembaliin Modal"
+        );
+
+        if (reward > 0) {
+            require(khdToken.transfer(msg.sender, reward), "Gagal kirim reward");
+            emit RewardClaimed(msg.sender, reward, block.timestamp);
+        }
+
+        emit Withdrawn(msg.sender, amountToUser, feeAmount, block.timestamp);
     }
 }
