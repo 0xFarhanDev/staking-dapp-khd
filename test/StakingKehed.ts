@@ -12,7 +12,13 @@ describe("StakingKehed", function () {
     const token = await Token.deploy();
 
     const Staking = await hre.ethers.getContractFactory("StakingKehed");
-    const staking = await Staking.deploy(token.target);
+    const staking = await hre.upgrades.deployProxy(
+      Staking,
+      [token.target, admin.address],
+      { initializer: "initialize",
+        unsafeAllow: ["constructor"]
+       }
+    );
 
     await token.transfer(user.address, hre.ethers.parseEther("1000"));
     await token.connect(user).approve(staking.target, hre.ethers.parseEther("1000"));

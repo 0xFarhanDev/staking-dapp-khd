@@ -2,11 +2,12 @@
 pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-contract StakingKehed is AccessControl, Pausable, ReentrancyGuard {
+contract StakingKehed is Initializable, AccessControlUpgradeable, PausableUpgradeable, ReentrancyGuard {
 
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant WITHDRAWER_ROLE = keccak256("WITHDRAWER_ROLE");
@@ -14,8 +15,8 @@ contract StakingKehed is AccessControl, Pausable, ReentrancyGuard {
     IERC20 public khdToken;
     address public feeCollector;
     uint256 public constant LOCK_DURATION = 60 seconds;
-    uint256 public maxStakePerUser = 5000 * 10 ** 18;
-    uint256 public withdrawalFeePercentage = 1;
+    uint256 public maxStakePerUser;
+    uint256 public withdrawalFeePercentage;
 
     mapping(address => uint256) public stakedBalances;
     mapping(address => uint256) public stakeTimestamp;
@@ -27,13 +28,23 @@ contract StakingKehed is AccessControl, Pausable, ReentrancyGuard {
     event RewardClaimed(address indexed user, uint256 amount, uint256 timestamp);
     event Compounded(address indexed user, uint256 amount, uint256 timestamp);
 
-    constructor(address _tokenAddress) AccessControl() {
-        khdToken = IERC20(_tokenAddress);
-        feeCollector = msg.sender;
+    constructor() {
+        _disableInitializers();
+    }
 
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _grantRole(PAUSER_ROLE, msg.sender);
-        _grantRole(WITHDRAWER_ROLE, msg.sender);
+    function initialize(address _tokenAddress, address _admin) public initializer {
+        __AccessControl_init();
+        __Pausable_init();
+        
+        khdToken = IERC20(_tokenAddress);
+        feeCollector = _admin;
+
+        maxStakePerUser = 5000 * 10 ** 18;
+        withdrawalFeePercentage = 1;
+
+        _grantRole(DEFAULT_ADMIN_ROLE, _admin);
+        _grantRole(PAUSER_ROLE, _admin);
+        _grantRole(WITHDRAWER_ROLE, _admin);
     }
      function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
